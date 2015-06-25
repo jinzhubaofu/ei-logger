@@ -1,0 +1,23 @@
+{
+    "name": "ei-logger",
+    "version": "0.0.1",
+    "homepage": "https://github.com/jinzhubaofu/ei-logger",
+    "authors": [
+        "ludafa@outlook.com"
+    ],
+    "description": "efe isomorphic logger",
+    "main": "lib/index.js",
+    "keywords": [
+        "efe",
+        "isomorphic",
+        "logger"
+    ],
+    "license": "ISC",
+    "ignore": [
+        "**/.*",
+        "node_modules",
+        "bower_components",
+        "test",
+        "tests"
+    ]
+}
