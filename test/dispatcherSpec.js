@@ -14,29 +14,58 @@ describe('dispatcher', function () {
         expect(u.isFunction(dispatcher.addListener)).toBe(true);
     });
 
-    it('有addListener方法', function () {
-        expect(u.isFunction(dispatcher.addListener)).toBe(true);
-    });
-
     it('有removeListener方法', function () {
         expect(u.isFunction(dispatcher.removeListener)).toBe(true);
     });
 
-    it('执行dispatch会触listener', function () {
+    it('addListener会校验tranport的两个必要的方法', function () {
 
-        var spy = jasmine.createSpy();
+        expect(function () {
+            dispatcher.addListener();
+        }).toThrow();
 
-        dispatcher.addListener(spy);
+        expect(function () {
+            dispatcher.addListener({
+                log: u.noop
+            });
+        }).toThrow();
 
-        dispatcher.dispatch('debug', 'aaa');
+        expect(function () {
+            dispatcher.addListener({
+                filter: u.noop
+            });
+        }).toThrow();
 
-        expect(spy).toHaveBeenCalledWith('debug', 'aaa');
+    });
 
-        dispatcher.removeListener(spy);
+    it('执行dispatch会触发Transport的`filter`和`log`', function () {
 
-        dispatcher.dispatch('info', 'bbb');
+        var fakeTransport = {
+            level: 'debug',
+            log: function () {
+            },
+            // jasmine的狗蛋spyOn，不管你这里写返回啥
+            // 它都不会理你，必须用下边那个returnValue才成
+            filter: function (loggerLevel) {
+                return true;
+            }
+        };
 
-        expect(spy).not.toHaveBeenCalledWith('info', 'bbb');
+        spyOn(fakeTransport, 'log');
+        spyOn(fakeTransport, 'filter').and.returnValue(true);
+
+        dispatcher.addListener(fakeTransport);
+
+        dispatcher.dispatch('test', 'debug', 'aaa');
+
+        expect(fakeTransport.filter).toHaveBeenCalledWith('debug');
+        expect(fakeTransport.log).toHaveBeenCalledWith('test', 'debug', 'aaa');
+
+        dispatcher.removeListener(fakeTransport);
+
+        dispatcher.dispatch('test', 'info', 'bbb');
+
+        expect(fakeTransport.log).not.toHaveBeenCalledWith('test', 'info', 'bbb');
 
     });
 

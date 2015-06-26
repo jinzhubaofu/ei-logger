@@ -31,7 +31,7 @@ describe('Logger', function () {
         expect(u.isFunction(logger.log)).toBe(true);
     });
 
-    it('Logger实例应该有`debug` `info` `warning` `error`', function () {
+    it('Logger实例应该有各level方法', function () {
         var logger = Logger.get('test');
         u.each(LEVELS.levels, function (_, name) {
             expect(u.isFunction(logger[name])).toBe(true);
@@ -59,62 +59,37 @@ describe('Logger', function () {
 
     });
 
-    it('log会触发dispatcher释放事件', function () {
-        var spy = jasmine.createSpy();
-        dispatcher.addListener(spy);
-        var logger = Logger.get('aaa');
-        logger.log('info', 'aaa');
-        expect(spy).toHaveBeenCalledWith('info', 'aaa');
-    });
-
-    it('level方法会触发dispatcher事件', function () {
-        var spy = jasmine.createSpy();
-        dispatcher.addListener(spy);
-        var logger = Logger.get('a');
-        u.each(
-            LEVELS.levels,
-            function (_, levelName) {
-                logger[levelName]('aaa');
-                expect(spy).toHaveBeenCalledWith(levelName, 'aaa');
-            }
-        );
-    });
-
     it('level方法会触发transport的log', function () {
 
-        var TestTransport = Transport.extend({
-            type: 'testtesttest',
-            log: function () {
-            }
+        var spy = jasmine.createSpy();
+
+        var TestTransport = Transport.createClass({
+            log: spy
         });
 
-        var proto = TestTransport.prototype;
+        var testTransport = new TestTransport();
 
-        spyOn(proto, 'log');
+        // spyOn(testTransport, 'log');
+        // spyOn(testTransport, 'filter').and.returnValue(true);
 
-        new TestTransport({
-            level: 'warn'
-        });
+        dispatcher.addListener(testTransport);
 
-        new TestTransport({
-            level: 'debug'
-        });
-
-        var logger = Logger.get('aaa');
-
-        var log = TestTransport.prototype.log;
+        var logger = Logger.get('kkk');
 
         logger.debug('aaa');
-        expect(log.calls.count()).toBe(1);
-        expect(log).toHaveBeenCalledWith('debug', 'aaa');
+        // expect(spy.calls.count()).toBe(0);
+        // expect(testTransport.filter.calls.count()).toBe(1);
+        expect(spy).not.toHaveBeenCalledWith('kkk', 'debug', 'aaa');
 
         logger.info('aaa');
-        expect(log.calls.count()).toBe(2);
-        expect(log).toHaveBeenCalledWith('info', 'aaa');
+        // expect(spy.calls.count()).toBe(1);
+        // expect(testTransport.filter.calls.count()).toBe(2);
+        expect(spy).toHaveBeenCalledWith('kkk', 'info', 'aaa');
 
         logger.error('aaa');
-        expect(log.calls.count()).toBe(4);
-        expect(log).toHaveBeenCalledWith('error', 'aaa');
+        // expect(spy.calls.count()).toBe(2);
+        // expect(testTransport.filter.calls.count()).toBe(3);
+        expect(spy).toHaveBeenCalledWith('kkk', 'error', 'aaa');
 
     });
 

@@ -11,78 +11,57 @@ var dispatcher = require('../lib/dispatcher');
 
 describe('Transport', function () {
 
-    it('getClass', function () {
-        expect(typeof Transport.getClass).toBe('function');
+    describe('createClass', function () {
 
-        expect(Transport.getClass('aaa')).toBeFalsy();
-
-        var a = Transport.extend({
-            type: 'TransportSpecGetClassTest',
-            log: u.noop
+        it('createClass', function () {
+            expect(typeof Transport.createClass).toBe('function');
         });
 
-        expect(a).toBe(Transport.getClass('TransportSpecGetClassTest'));
+
+        it('必须实现`log`方法', function () {
+
+            expect(function () {
+                Transport.createClass();
+            }).toThrow();
+
+            expect(function () {
+                Transport.createClass({
+                    log: null
+                });
+            }).toThrow();
+
+        });
+    });
+
+    it('transport实例必须有`log`方法', function () {
+
+        var a = u.noop;
+
+        var TestTransport = Transport.createClass({
+            log: a
+        });
+
+        var test = new TestTransport();
+
+        expect(test.log).toBe(a);
 
     });
 
-    it('extend', function () {
+    it('transport实例必须有`filter`方法', function () {
 
-        expect(typeof Transport.extend).toBe('function');
-
-        expect(function () {
-            Transport.extend();
-        }).toThrow();
-
-        expect(function () {
-            Transport.extend({
-                type: 'aaaaa'
-            });
-        }).toThrow();
-
-
-        expect(function () {
-            Transport.extend({
-                type: 'aaaaa',
-                log: null
-            });
-        }).toThrow();
-
-
-        var logSpy = jasmine.createSpy('TransportLog');
-
-        var AAA = Transport.extend({
-            type: 'aaa',
-            log: logSpy
-        });
-
-        expect(AAA.type).toBe('aaa');
-
-        var aaa = new AAA();
-
-        expect(u.isFunction(aaa.log)).toBe(true);
-
-    });
-
-    it('Transport的类型全局唯一', function () {
-
-        Transport.extend({
-            type: 'a',
+        var TestTransport = Transport.createClass({
             log: u.noop
         });
 
-        expect(function () {
-            Transport.extend({
-                type: 'a',
-                log: u.noop
-            });
-        }).toThrow();
+        var test = new TestTransport();
+
+        expect(u.isFunction(test.filter)).toBe(true);
 
     });
 
     it('默认Transport有info级别', function () {
 
-        var DefaultLevelTransport = Transport.extend({
-            type: 'DefaultLevelTransport',
+        var DefaultLevelTransport = Transport.createClass({
             log: function () {
             }
         });
@@ -95,8 +74,7 @@ describe('Transport', function () {
 
     it('设定level级别', function () {
 
-        var CustomLevelTransport = Transport.extend({
-            type: 'CustomLevelTransport',
+        var CustomLevelTransport = Transport.createClass({
             log: function () {
             }
         });
@@ -109,23 +87,21 @@ describe('Transport', function () {
 
     });
 
-    it('会接收到所有的日志事件', function () {
+    it('会接收到所有的日志事件，并进行过滤', function () {
 
         var spy = jasmine.createSpy();
 
-        var ConsoleTransport = Transport.extend({
-            type: 'ConsoleTransport',
+        var ConsoleTransport = Transport.createClass({
             log: spy
         });
 
-        new ConsoleTransport();
+        dispatcher.addListener(new ConsoleTransport());
 
-        dispatcher.dispatch('debug', 'aaa');
-        expect(spy).not.toHaveBeenCalledWith('debug', 'aaa');
+        dispatcher.dispatch('test', 'debug', 'aaa');
+        expect(spy).not.toHaveBeenCalledWith('test', 'debug', 'aaa');
 
-        dispatcher.dispatch('info', 'aaa');
-        expect(spy).toHaveBeenCalledWith('info', 'aaa');
-
+        dispatcher.dispatch('test', 'info', 'aaa');
+        expect(spy).toHaveBeenCalledWith('test', 'info', 'aaa');
 
     });
 

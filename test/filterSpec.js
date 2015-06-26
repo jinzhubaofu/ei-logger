@@ -16,6 +16,8 @@ describe('filter', function () {
 
     it('应该是对的', function () {
         expect(filter('debug', 'info')).toBe(false);
+        expect(filter('info', 'info')).toBe(true);
+        expect(filter('error', 'info')).toBe(true);
     });
 
 
