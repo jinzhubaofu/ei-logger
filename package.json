@@ -1,6 +1,6 @@
 {
     "name": "ei-logger",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "efe isomorphic logger",
     "main": "lib/main.js",
     "scripts": {
