@@ -1,4 +1,38 @@
 /*! 2015 Baidu Inc. All Rights Reserved */
+define('ei-logger/dispatcher', [
+    'require',
+    'exports',
+    'module',
+    'underscore'
+], function (require, exports, module) {
+    var transports = [];
+    var dispatcher = {};
+    var u = require('underscore');
+    dispatcher.addListener = function (transport) {
+        if (!transport || !u.isFunction(transport.log) || !u.isFunction(transport.filter)) {
+            throw new Error('transport must have `log` and `filter` interface');
+        }
+        transports.push(transport);
+    };
+    dispatcher.removeListener = function (transport) {
+        for (var i = transports.length - 1; i >= 0; --i) {
+            if (transports[i] === transport) {
+                transports.splice(i, 1);
+                break;
+            }
+        }
+    };
+    dispatcher.dispatch = function (loggerName, level) {
+        var localTransports = transports.slice();
+        for (var i = 0, len = localTransports.length; i < len; ++i) {
+            var transport = localTransports[i];
+            if (transport.filter(level)) {
+                transport.log.apply(transport, arguments);
+            }
+        }
+    };
+    module.exports = dispatcher;
+});
 define('ei-logger/conf/level', [
     'require',
     'exports',
@@ -21,37 +55,89 @@ define('ei-logger/filter', [
     './conf/level'
 ], function (require, exports, module) {
     var LEVELS = require('./conf/level').levels;
-    module.exports = function (levelName1, levelName2) {
-        var levelValue1 = LEVELS[levelName1];
-        var levelValue2 = LEVELS[levelName2];
-        return levelValue1 >= levelValue2;
+    module.exports = function (loggerLevel, transportLevel) {
+        return LEVELS[loggerLevel] >= LEVELS[transportLevel];
     };
 });
-define('ei-logger/dispatcher', [
+define('ei-logger/Emitter', [
     'require',
     'exports',
-    'module'
+    'module',
+    'underscore'
 ], function (require, exports, module) {
-    var handlers = [];
-    var dispatcher = {};
-    dispatcher.addListener = function (handler) {
-        handlers.push(handler);
-    };
-    dispatcher.removeListener = function (handler) {
-        for (var i = handlers.length - 1; i >= 0; --i) {
-            if (handlers[i] === handler) {
-                handlers.splice(i, 1);
-                break;
+    var EMITTER_LISTENER_POOL_ATTR = '__listeners__';
+    var u = require('underscore');
+    function Emitter() {
+    }
+    var mixins = {
+        on: function (name, handler) {
+            var pool = this[EMITTER_LISTENER_POOL_ATTR];
+            if (!pool) {
+                pool = this[EMITTER_LISTENER_POOL_ATTR] = {};
+            }
+            var listeners = pool[name];
+            if (!listeners) {
+                listeners = pool[name] = [];
+            }
+            listeners.push(handler);
+            return this;
+        },
+        off: function (name, handler) {
+            var pool = this[EMITTER_LISTENER_POOL_ATTR];
+            if (!pool) {
+                return this;
+            }
+            if (!name) {
+                this[EMITTER_LISTENER_POOL_ATTR] = null;
+                return;
+            }
+            var listeners = pool[name];
+            if (!listeners) {
+                return this;
+            }
+            if (!handler) {
+                pool[name] = [];
+            }
+            for (var i = listeners.length - 1; i >= 0; --i) {
+                if (listeners[i] === handler) {
+                    listeners.splice(i, 1);
+                    return this;
+                }
+            }
+            return this;
+        },
+        once: function (name, handler) {
+            var me = this;
+            var onceHandler = function () {
+                me.off(name, onceHandler);
+                return handler.apply(me, arguments);
+            };
+            me.on(name, onceHandler);
+        },
+        emit: function (name) {
+            var pool = this[EMITTER_LISTENER_POOL_ATTR];
+            if (!pool) {
+                return this;
+            }
+            var listeners = pool[name];
+            if (!listeners || !listeners.length) {
+                return this;
+            }
+            var args = u.toArray(arguments).slice(1);
+            listeners = listeners.slice();
+            for (var i = 0, len = listeners.length; i < len; ++i) {
+                listeners[i].apply(this, args);
             }
         }
     };
-    dispatcher.dispatch = function () {
-        var localHandlers = handlers.slice();
-        for (var i = 0, len = localHandlers.length; i < len; ++i) {
-            handlers[i].apply(null, arguments);
+    u.extend(Emitter.prototype, mixins);
+    Emitter.enable = function (target) {
+        if (u.isFunction(target)) {
+            target = target.prototype;
         }
+        u.extend(target, mixins);
     };
-    module.exports = dispatcher;
+    module.exports = Emitter;
 });
 define('ei-logger/Transport', [
     'require',
@@ -60,49 +146,34 @@ define('ei-logger/Transport', [
     'underscore',
     './conf/level',
     './filter',
-    './dispatcher'
+    './dispatcher',
+    './Emitter'
 ], function (require, exports, module) {
     var u = require('underscore');
     var LEVEL = require('./conf/level');
     var filter = require('./filter');
     var dispatcher = require('./dispatcher');
+    var Emitter = require('./Emitter');
     var TransportMixin = {
-        init: function (options) {
+        init: u.noop,
+        filter: function (loggerLevel) {
+            return filter(loggerLevel, this.level);
+        }
+    };
+    Emitter.enable(TransportMixin);
+    exports.createClass = function (options) {
+        if (!options || !u.isFunction(options.log)) {
+            throw new Error('Transport must implement `log` method');
+        }
+        function Transport(options) {
             u.extend(this, {
                 level: LEVEL.level,
                 levels: LEVEL.levels
             }, options);
-            dispatcher.addListener(u.bind(this.onLog, this));
-        },
-        onLog: function (level) {
-            if (!this.filter(level)) {
-                return;
-            }
-            this.log.apply(this, arguments);
-        },
-        filter: function (level) {
-            return filter(level, this.level);
+            this.init();
         }
-    };
-    var TRANSPORT_CLASS_POOL = {};
-    exports.extend = function (options) {
-        if (!options || !u.isFunction(options.log) || !options.type) {
-            throw new Error('Transport must have a `type` and implement `log` method');
-        }
-        var type = options.type;
-        if (TRANSPORT_CLASS_POOL[type]) {
-            throw new Error('Transport ' + type + ' already exists');
-        }
-        var Transport = function (options) {
-            this.init(options);
-        };
         u.extend(Transport.prototype, TransportMixin, options);
-        Transport.type = type;
-        TRANSPORT_CLASS_POOL[type] = Transport;
         return Transport;
-    };
-    exports.getClass = function (type) {
-        return TRANSPORT_CLASS_POOL[type];
     };
 });
 define('ei-logger/Logger', [
@@ -121,7 +192,7 @@ define('ei-logger/Logger', [
         this.setLevels(LEVELS);
     }
     Logger.prototype.log = function () {
-        dispatcher.dispatch.apply(dispatcher, arguments);
+        dispatcher.dispatch.apply(dispatcher, [this.name].concat(u.toArray(arguments)));
     };
     Logger.prototype.setLevels = function (levels) {
         u.each(this.levels, function (_, levelName) {
@@ -142,11 +213,28 @@ define('ei-logger/main', [
     'require',
     'exports',
     'module',
+    'underscore',
+    './dispatcher',
     './Transport',
     './Logger'
 ], function (require, exports, module) {
-    exports.Transport = require('./Transport');
-    exports.Logger = require('./Logger');
+    var u = require('underscore');
+    var dispatcher = require('./dispatcher');
+    var Transport = require('./Transport');
+    var Logger = require('./Logger');
+    var eiLogger = function (name) {
+        return Logger.get(name);
+    };
+    eiLogger.createTransport = function (proto) {
+        return Transport.createClass(proto);
+    };
+    eiLogger.addTransport = function (transport) {
+        dispatcher.addListener(transport);
+    };
+    eiLogger.removeTransport = function (transport) {
+        dispatcher.removeListener(transport);
+    };
+    module.exports = eiLogger;
 });
 /**
  * @file amd wrap
